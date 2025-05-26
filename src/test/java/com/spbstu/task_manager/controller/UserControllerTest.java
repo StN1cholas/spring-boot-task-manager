@@ -17,6 +17,7 @@ import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.hamcrest.Matchers.is;
 
 @WebMvcTest(UserController.class)
 public class UserControllerTest {
@@ -27,7 +28,7 @@ public class UserControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Autowired // Внедряем мок, который будет создан в TestConfiguration
+    @Autowired
     private UserService userServiceMock;
 
     @TestConfiguration
@@ -40,17 +41,20 @@ public class UserControllerTest {
 
     @Test
     void registerUser_shouldReturnCreatedUserAndHttpStatusCreated() throws Exception {
-        User userToRegister = new User(null, "testuser", "password123");
-        User registeredUser = new User(1L, "testuser", "password123");
-        given(userServiceMock.registerUser(any(User.class))).willReturn(registeredUser);
+        // Объект, который мы отправляем в запросе
+        User userToRegisterRequest = new User("testuser", "password123");
+        // Объект, который имитирует ответ сервиса после сохранения
+        User registeredUserFromService = new User(1L, "testuser", "password123");
+
+        given(userServiceMock.registerUser(any(User.class))).willReturn(registeredUserFromService);
 
         mockMvc.perform(post("/api/users/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(userToRegister)))
+                        .content(objectMapper.writeValueAsString(userToRegisterRequest)))
                 .andExpect(status().isCreated())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.id").value(1L))
-                .andExpect(jsonPath("$.username").value("testuser"));
+                .andExpect(jsonPath("$.id", is(1))) // is(1L) для Long
+                .andExpect(jsonPath("$.username", is("testuser")));
     }
 
     @Test
@@ -65,8 +69,8 @@ public class UserControllerTest {
                         .param("password", password))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(jsonPath("$.id").value(1L))
-                .andExpect(jsonPath("$.username").value("testuser"));
+                .andExpect(jsonPath("$.id", is(1)))
+                .andExpect(jsonPath("$.username", is("testuser")));
     }
 
     @Test

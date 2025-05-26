@@ -1,31 +1,59 @@
 package com.spbstu.task_manager.model;
 
+import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+@Entity
+@Table(name = "task")
 public class Task {
-    private Long id;
-    private String title;
-    private String description;
-    private LocalDate targetDate;
-    private LocalDateTime creationDate;
-    private boolean deleted;
-    private Long userId; // Id пользователя, которому принадлежит задача
 
-    // Constructors, getters, setters
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private String title;
+
+    private String description; // Может быть nullable
+
+    @Column(nullable = false)
+    private LocalDate targetDate;
+
+    @Column(nullable = false, updatable = false) // updatable = false, т.к. дата создания не должна меняться
+    private LocalDateTime creationDate;
+
+    private boolean deleted = false; // Значение по умолчанию
+
+    @Column(nullable = false)
+    private Long userId; // Пока просто ID пользователя. Позже можно сделать @ManyToOne связь
+
     public Task() {
-        this.creationDate = LocalDateTime.now();
+        // creationDate будет устанавливаться в сервисе перед сохранением
     }
 
-    public Task(Long id, String title, String description, LocalDate targetDate, Long userId) {
+    // Конструктор без ID
+    public Task(String title, String description, LocalDate targetDate, Long userId) {
+        this.title = title;
+        this.description = description;
+        this.targetDate = targetDate;
+        this.userId = userId;
+        // creationDate будет устанавливаться в сервисе перед сохранением
+    }
+
+    // Полный конструктор (может быть полезен для маппинга или тестов)
+    public Task(Long id, String title, String description, LocalDate targetDate, LocalDateTime creationDate, boolean deleted, Long userId) {
         this.id = id;
         this.title = title;
         this.description = description;
         this.targetDate = targetDate;
-        this.creationDate = LocalDateTime.now();
+        this.creationDate = creationDate;
+        this.deleted = deleted;
         this.userId = userId;
     }
 
+
+    // Getters and Setters
     public Long getId() {
         return id;
     }
@@ -80,5 +108,13 @@ public class Task {
 
     public void setUserId(Long userId) {
         this.userId = userId;
+    }
+
+    // Метод для установки даты создания перед сохранением в БД
+    @PrePersist
+    protected void onCreate() {
+        if (this.creationDate == null) { // Устанавливаем только если еще не установлена
+            this.creationDate = LocalDateTime.now();
+        }
     }
 }

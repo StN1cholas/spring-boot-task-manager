@@ -38,7 +38,7 @@ public class TaskControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Autowired // Внедряем мок
+    @Autowired
     private TaskService taskServiceMock;
 
     @TestConfiguration
@@ -57,15 +57,16 @@ public class TaskControllerTest {
 
     @Test
     void getAllTasks_shouldReturnListOfTasksForUser() throws Exception {
+        // Arrange
         Long userId = 1L;
-        Task task1 = new Task(1L, "Task 1", "Desc 1", LocalDate.now().plusDays(1), userId);
-        task1.setCreationDate(LocalDateTime.now());
-        Task task2 = new Task(2L, "Task 2", "Desc 2", LocalDate.now().plusDays(2), userId);
-        task2.setCreationDate(LocalDateTime.now());
+        // Создаем объекты Task так, как они были бы получены из сервиса
+        Task task1 = new Task(1L, "Task 1", "Desc 1", LocalDate.now().plusDays(1), LocalDateTime.now().minusDays(1), false, userId);
+        Task task2 = new Task(2L, "Task 2", "Desc 2", LocalDate.now().plusDays(2), LocalDateTime.now().minusHours(5), false, userId);
         List<Task> tasks = Arrays.asList(task1, task2);
 
         given(taskServiceMock.getAllTasks(userId)).willReturn(tasks);
 
+        // Act & Assert
         mockMvc.perform(get("/api/tasks/{userId}", userId)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
@@ -90,8 +91,7 @@ public class TaskControllerTest {
     @Test
     void getPendingTasks_shouldReturnListOfPendingTasksForUser() throws Exception {
         Long userId = 1L;
-        Task task1 = new Task(1L, "Pending Task 1", "Desc 1", LocalDate.now().plusDays(1), userId);
-        task1.setCreationDate(LocalDateTime.now());
+        Task task1 = new Task(1L, "Pending Task 1", "Desc 1", LocalDate.now().plusDays(1), LocalDateTime.now(), false, userId);
         List<Task> pendingTasks = Collections.singletonList(task1);
 
         given(taskServiceMock.getPendingTasks(userId)).willReturn(pendingTasks);
@@ -106,15 +106,19 @@ public class TaskControllerTest {
 
     @Test
     void createTask_shouldReturnCreatedTaskAndHttpStatusCreated() throws Exception {
-        Task taskToCreate = new Task(null, "New Task", "New Desc", LocalDate.now().plusDays(3), 1L);
-        Task createdTask = new Task(1L, "New Task", "New Desc", LocalDate.now().plusDays(3), 1L);
-        createdTask.setCreationDate(LocalDateTime.now());
+        // Arrange
+        // Этот объект мы отправляем в запросе (без ID, creationDate)
+        Task taskToCreateRequest = new Task("New Task", "New Desc", LocalDate.now().plusDays(3), 1L);
 
-        given(taskServiceMock.createTask(any(Task.class))).willReturn(createdTask);
+        // Этот объект имитирует то, что вернет сервис после сохранения в БД (с ID и creationDate)
+        Task createdTaskFromService = new Task(1L, "New Task", "New Desc", LocalDate.now().plusDays(3), LocalDateTime.now(), false, 1L);
 
+        given(taskServiceMock.createTask(any(Task.class))).willReturn(createdTaskFromService);
+
+        // Act & Assert
         mockMvc.perform(post("/api/tasks")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(taskToCreate)))
+                        .content(objectMapper.writeValueAsString(taskToCreateRequest)))
                 .andExpect(status().isCreated())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.id", is(1)))
@@ -137,8 +141,7 @@ public class TaskControllerTest {
     void getTaskById_shouldReturnTask_whenExists() throws Exception {
         Long taskId = 1L;
         Long userId = 1L;
-        Task task = new Task(taskId, "Found Task", "Desc", LocalDate.now().plusDays(1), userId);
-        task.setCreationDate(LocalDateTime.now());
+        Task task = new Task(taskId, "Found Task", "Desc", LocalDate.now().plusDays(1), LocalDateTime.now(), false, userId);
 
         given(taskServiceMock.getTaskById(taskId)).willReturn(task);
 

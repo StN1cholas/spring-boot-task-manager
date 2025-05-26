@@ -1,25 +1,46 @@
 package com.spbstu.task_manager.model;
 
+import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
+@Entity
+@Table(name = "notification")
 public class Notification {
-    private Long id;
-    private String message;
-    private LocalDateTime timestamp;
-    private Long userId; // Id пользователя, которому принадлежит уведомление
 
-    // Constructors, getters, setters
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false)
+    private String message;
+
+    @Column(nullable = false, updatable = false)
+    private LocalDateTime timestamp;
+
+    @Column(nullable = false)
+    private Long userId; // Пока просто ID пользователя. Позже можно сделать @ManyToOne связь
+
     public Notification() {
-        this.timestamp = LocalDateTime.now();
+        // timestamp будет устанавливаться в сервисе перед сохранением или через @PrePersist
     }
 
-    public Notification(Long id, String message, Long userId) {
+    // Конструктор без ID
+    public Notification(String message, Long userId) {
+        this.message = message;
+        this.userId = userId;
+        // timestamp будет устанавливаться в сервисе перед сохранением или через @PrePersist
+    }
+
+    // Полный конструктор (может быть полезен для маппинга или тестов)
+    public Notification(Long id, String message, LocalDateTime timestamp, Long userId) {
         this.id = id;
         this.message = message;
-        this.timestamp = LocalDateTime.now();
+        this.timestamp = timestamp;
         this.userId = userId;
     }
 
+
+    // Getters and Setters
     public Long getId() {
         return id;
     }
@@ -50,5 +71,12 @@ public class Notification {
 
     public void setUserId(Long userId) {
         this.userId = userId;
+    }
+
+    @PrePersist
+    protected void onCreate() {
+        if (this.timestamp == null) {
+            this.timestamp = LocalDateTime.now();
+        }
     }
 }

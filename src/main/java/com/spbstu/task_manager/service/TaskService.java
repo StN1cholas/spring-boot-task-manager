@@ -1,48 +1,61 @@
 package com.spbstu.task_manager.service;
 
 import com.spbstu.task_manager.model.Task;
+import com.spbstu.task_manager.repository.TaskRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
+import java.util.Optional;
 
 @Service
 public class TaskService {
 
-    private final Map<Long, Task> tasks = new ConcurrentHashMap<>(); // Потокобезопасная Map
-    private final AtomicLong idCounter = new AtomicLong(0);
+    private final TaskRepository taskRepository;
 
+    @Autowired
+    public TaskService(TaskRepository taskRepository) {
+        this.taskRepository = taskRepository;
+    }
+
+    @Transactional(readOnly = true)
     public List<Task> getAllTasks(Long userId) {
-        return tasks.values().stream()
-                .filter(task -> !task.isDeleted() && task.getUserId().equals(userId))
-                .collect(Collectors.toList());
+        return taskRepository.findByUserIdAndDeletedFalse(userId);
     }
 
+    @Transactional(readOnly = true)
     public List<Task> getPendingTasks(Long userId) {
-        return tasks.values().stream()
-                .filter(task -> !task.isDeleted() && task.getUserId().equals(userId) && task.getTargetDate().isAfter(java.time.LocalDate.now()))
-                .collect(Collectors.toList());
+        return taskRepository.findByUserIdAndDeletedFalseAndTargetDateAfter(userId, LocalDate.now());
     }
 
+    @Transactional
     public Task createTask(Task task) {
-        Long id = idCounter.incrementAndGet();
-        task.setId(id);
-        tasks.put(id, task);
-        return task;
+        // Установка creationDate здесь больше не нужна, если используется @PrePersist в модели
+        // Но если @PrePersist нет, то:
+        // if (task.getCreationDate() == null) {
+        //     task.setCreationDate(LocalDateTime.now());
+        // }
+        task.setDeleted(false); // Убедимся, что новая задача не удалена
+        return taskRepository.save(task);
     }
 
+    @Transactional
     public void deleteTask(Long id) {
-        Task task = tasks.get(id);
-        if (task != null) {
+        Optional<Task> taskOptional = taskRepository.findById(id);
+        if (taskOptional.isPresent()) {
+            Task task = taskOptional.get();
             task.setDeleted(true);
+            taskRepository.save(task); // Сохраняем изменения (обновляем флаг deleted)
         }
+        // Если задача не найдена, ничего не делаем или можно выбросить исключение
     }
 
+    @Transactional(readOnly = true)
     public Task getTaskById(Long id) {
-        return tasks.get(id); // Added to get task by id
+        // findById возвращает Optional, нужно его обработать
+        return taskRepository.findById(id).orElse(null);
     }
 }
