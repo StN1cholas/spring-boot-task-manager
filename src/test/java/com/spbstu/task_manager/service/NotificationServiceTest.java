@@ -1,108 +1,91 @@
 package com.spbstu.task_manager.service;
 
 import com.spbstu.task_manager.model.Notification;
+import com.spbstu.task_manager.repository.NotificationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 
+@ExtendWith(MockitoExtension.class)
 public class NotificationServiceTest {
 
+    @Mock
+    private NotificationRepository notificationRepository;
+
+    @InjectMocks
     private NotificationService notificationService;
+
+    private Notification notification1, notification2;
+    private Long userId = 1L;
 
     @BeforeEach
     void setUp() {
-        notificationService = new NotificationService();
+        notification1 = new Notification(1L, "Message 1", LocalDateTime.now().minusHours(1), userId);
+        notification2 = new Notification(2L, "Message 2", LocalDateTime.now(), userId);
     }
 
     @Test
-    void createNotification_shouldAddNotificationAndReturnItWithId() {
+    void getAllNotifications_shouldReturnNotificationsForUser() {
         // Arrange
-        Notification newNotification = new Notification(null, "Test Message", 1L);
+        given(notificationRepository.findByUserId(userId)).willReturn(Arrays.asList(notification1, notification2));
+
+        // Act
+        List<Notification> notifications = notificationService.getAllNotifications(userId);
+
+        // Assert
+        assertThat(notifications).isNotNull().hasSize(2);
+        assertThat(notifications).containsExactlyInAnyOrder(notification1, notification2);
+        verify(notificationRepository).findByUserId(userId);
+    }
+
+    @Test
+    void getPendingNotifications_shouldReturnAllNotificationsForUser_asPerCurrentLogic() {
+        // Arrange
+        // В текущей реализации getPendingNotifications вызывает findByUserId
+        given(notificationRepository.findByUserId(userId)).willReturn(Arrays.asList(notification1, notification2));
+
+        // Act
+        List<Notification> pendingNotifications = notificationService.getPendingNotifications(userId);
+
+        // Assert
+        assertThat(pendingNotifications).isNotNull().hasSize(2);
+        verify(notificationRepository).findByUserId(userId);
+    }
+
+    @Test
+    void createNotification_shouldSaveAndReturnNotification() {
+        // Arrange
+        Notification newNotification = new Notification("New Message", userId);
+        // @PrePersist в модели Notification установит timestamp
+        given(notificationRepository.save(any(Notification.class))).willAnswer(invocation -> {
+            Notification n = invocation.getArgument(0);
+            Notification savedNotification = new Notification(3L, n.getMessage(), LocalDateTime.now(), n.getUserId());
+            if (n.getTimestamp() == null) savedNotification.setTimestamp(LocalDateTime.now()); // Имитация @PrePersist
+            return savedNotification;
+        });
 
         // Act
         Notification createdNotification = notificationService.createNotification(newNotification);
 
         // Assert
         assertThat(createdNotification).isNotNull();
-        assertThat(createdNotification.getId()).isNotNull().isEqualTo(1L);
-        assertThat(createdNotification.getMessage()).isEqualTo("Test Message");
-        assertThat(createdNotification.getUserId()).isEqualTo(1L);
+        assertThat(createdNotification.getId()).isEqualTo(3L); // Пример ID
+        assertThat(createdNotification.getMessage()).isEqualTo("New Message");
         assertThat(createdNotification.getTimestamp()).isNotNull();
-
-        // Дополнительная проверка (хотя getAllNotifications уже это проверяет)
-        // Можно было бы добавить getNotificationById, если бы он был
-        List<Notification> userNotifications = notificationService.getAllNotifications(1L);
-        assertThat(userNotifications).contains(createdNotification);
-    }
-
-    @Test
-    void getAllNotifications_shouldReturnAllNotificationsForSpecificUser() {
-        // Arrange
-        Long userId1 = 1L;
-        Long userId2 = 2L;
-
-        Notification n1u1 = notificationService.createNotification(new Notification(null, "N1 U1", userId1));
-        Notification n2u1 = notificationService.createNotification(new Notification(null, "N2 U1", userId1));
-        notificationService.createNotification(new Notification(null, "N1 U2", userId2)); // For other user
-
-        // Act
-        List<Notification> user1Notifications = notificationService.getAllNotifications(userId1);
-
-        // Assert
-        assertThat(user1Notifications)
-                .isNotNull()
-                .hasSize(2)
-                .extracting(Notification::getMessage)
-                .containsExactlyInAnyOrder("N1 U1", "N2 U1");
-    }
-
-    @Test
-    void getAllNotifications_shouldReturnEmptyList_whenUserHasNoNotifications() {
-        // Arrange
-        Long userIdWithNoNotifications = 3L;
-        notificationService.createNotification(new Notification(null, "N1 U1", 1L)); // For other user
-
-        // Act
-        List<Notification> notifications = notificationService.getAllNotifications(userIdWithNoNotifications);
-
-        // Assert
-        assertThat(notifications).isNotNull().isEmpty();
-    }
-
-    @Test
-    void getPendingNotifications_shouldReturnAllNotificationsForUser_asPerCurrentLogic() {
-        // Arrange
-        Long userId1 = 1L;
-        Long userId2 = 2L;
-
-        // В текущей реализации getPendingNotifications возвращает то же, что и getAllNotifications
-        Notification n1u1 = notificationService.createNotification(new Notification(null, "Pending N1 U1", userId1));
-        Notification n2u1 = notificationService.createNotification(new Notification(null, "Pending N2 U1", userId1));
-        notificationService.createNotification(new Notification(null, "Pending N1 U2", userId2));
-
-        // Act
-        List<Notification> pendingUser1Notifications = notificationService.getPendingNotifications(userId1);
-
-        // Assert
-        assertThat(pendingUser1Notifications)
-                .isNotNull()
-                .hasSize(2)
-                .extracting(Notification::getMessage)
-                .containsExactlyInAnyOrder("Pending N1 U1", "Pending N2 U1");
-    }
-
-    @Test
-    void getPendingNotifications_shouldReturnEmptyList_whenUserHasNoNotifications() {
-        // Arrange
-        Long userIdWithNoNotifications = 3L;
-
-        // Act
-        List<Notification> notifications = notificationService.getPendingNotifications(userIdWithNoNotifications);
-
-        // Assert
-        assertThat(notifications).isNotNull().isEmpty();
+        verify(notificationRepository).save(any(Notification.class));
     }
 }

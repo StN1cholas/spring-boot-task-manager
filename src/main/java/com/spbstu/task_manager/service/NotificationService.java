@@ -1,39 +1,43 @@
 package com.spbstu.task_manager.service;
 
 import com.spbstu.task_manager.model.Notification;
+import com.spbstu.task_manager.repository.NotificationRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
-import java.util.ArrayList;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
-import java.util.stream.Collectors;
 
 @Service
 public class NotificationService {
 
-    private final Map<Long, Notification> notifications = new ConcurrentHashMap<>();
-    private final AtomicLong idCounter = new AtomicLong(0);
+    private final NotificationRepository notificationRepository;
 
+    @Autowired
+    public NotificationService(NotificationRepository notificationRepository) {
+        this.notificationRepository = notificationRepository;
+    }
+
+    @Transactional(readOnly = true)
     public List<Notification> getAllNotifications(Long userId) {
-        return notifications.values().stream()
-                .filter(notification -> notification.getUserId().equals(userId))
-                .collect(Collectors.toList());
+        return notificationRepository.findByUserId(userId);
     }
 
+    @Transactional(readOnly = true)
     public List<Notification> getPendingNotifications(Long userId) {
-        // Здесь можно добавить логику для определения "pending" уведомлений,
-        // например, по дате создания или статусу
-        return notifications.values().stream()
-                .filter(notification -> notification.getUserId().equals(userId)) // Просто возвращаем все уведомления для примера
-                .collect(Collectors.toList());
+        // Текущая логика: "pending" это все уведомления пользователя.
+        // Если бы была другая логика (например, isRead=false),
+        // то здесь был бы другой метод репозитория.
+        return notificationRepository.findByUserId(userId);
     }
 
+    @Transactional
     public Notification createNotification(Notification notification) {
-        Long id = idCounter.incrementAndGet();
-        notification.setId(id);
-        notifications.put(id, notification);
-        return notification;
+        // Установка timestamp здесь больше не нужна, если используется @PrePersist в модели
+        // if (notification.getTimestamp() == null) {
+        //     notification.setTimestamp(LocalDateTime.now());
+        // }
+        return notificationRepository.save(notification);
     }
 }

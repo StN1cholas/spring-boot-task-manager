@@ -34,7 +34,7 @@ public class NotificationControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
-    @Autowired // Внедряем мок
+    @Autowired
     private NotificationService notificationServiceMock;
 
     @TestConfiguration
@@ -53,29 +53,34 @@ public class NotificationControllerTest {
 
     @Test
     void getAllNotifications_shouldReturnListOfNotificationsForUser() throws Exception {
+        // Arrange
         Long userId = 1L;
-        Notification n1 = new Notification(1L, "Notification 1", userId);
-        n1.setTimestamp(LocalDateTime.now());
-        Notification n2 = new Notification(2L, "Notification 2", userId);
-        n2.setTimestamp(LocalDateTime.now().minusHours(1));
+        // Создаем объекты Notification так, как они были бы получены из сервиса (с ID и timestamp)
+        Notification n1 = new Notification(1L, "Notification 1", LocalDateTime.now().minusHours(1), userId);
+        Notification n2 = new Notification(2L, "Notification 2", LocalDateTime.now(), userId);
         List<Notification> notifications = Arrays.asList(n1, n2);
 
         given(notificationServiceMock.getAllNotifications(userId)).willReturn(notifications);
 
+        // Act & Assert
         mockMvc.perform(get("/api/notifications/{userId}", userId)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$", hasSize(2)))
-                .andExpect(jsonPath("$[0].id", is(1)))
-                .andExpect(jsonPath("$[1].id", is(2)));
+                .andExpect(jsonPath("$[0].id", is(1))) // is() из Hamcrest
+                .andExpect(jsonPath("$[0].message", is("Notification 1")))
+                .andExpect(jsonPath("$[1].id", is(2)))
+                .andExpect(jsonPath("$[1].message", is("Notification 2")));
     }
 
     @Test
     void getAllNotifications_shouldReturnEmptyList_whenUserHasNoNotifications() throws Exception {
+        // Arrange
         Long userId = 1L;
         given(notificationServiceMock.getAllNotifications(userId)).willReturn(Collections.emptyList());
 
+        // Act & Assert
         mockMvc.perform(get("/api/notifications/{userId}", userId)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
@@ -85,13 +90,14 @@ public class NotificationControllerTest {
 
     @Test
     void getPendingNotifications_shouldReturnListOfPendingNotificationsForUser() throws Exception {
+        // Arrange
         Long userId = 1L;
-        Notification n1 = new Notification(1L, "Pending Notification 1", userId);
-        n1.setTimestamp(LocalDateTime.now());
+        Notification n1 = new Notification(1L, "Pending Notification 1", LocalDateTime.now(), userId);
         List<Notification> pendingNotifications = Collections.singletonList(n1);
 
         given(notificationServiceMock.getPendingNotifications(userId)).willReturn(pendingNotifications);
 
+        // Act & Assert
         mockMvc.perform(get("/api/notifications/pending/{userId}", userId)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
