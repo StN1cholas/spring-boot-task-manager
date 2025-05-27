@@ -40,6 +40,11 @@ dependencies {
 	runtimeOnly 'org.postgresql:postgresql'
 	implementation 'org.flywaydb:flyway-database-postgresql:11.8.2'
 	testImplementation 'com.h2database:h2'
+
+	//Spring boos starter for cache
+	implementation 'org.springframework.boot:spring-boot-starter-cache'
+	// Spring Boot Starter for redis
+	implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 }
 
 bootJar {

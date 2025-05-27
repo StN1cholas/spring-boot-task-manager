@@ -1,10 +1,12 @@
 package com.spbstu.task_manager.model;
 
 import jakarta.persistence.*; // Используем jakarta.persistence.* для JPA 3+ (Spring Boot 3+)
+import java.io.Serializable;
 
 @Entity
 @Table(name = "app_user") // "user" часто является зарезервированным словом в SQL
-public class User {
+public class User implements Serializable {
+    private static final long serialVersionUID = 1L;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY) // Автогенерация ID базой данных
