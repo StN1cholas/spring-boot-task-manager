@@ -19,4 +19,6 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 
     // Можно добавить и другие методы, если понадобятся, например:
     // List<Task> findByUserIdAndDeletedFalseAndTargetDateBefore(Long userId, LocalDate date); // для просроченных
+
+    List<Task> findAllByDeletedFalse();
 }
