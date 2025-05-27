@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  app:
+    image: task-manager-app:latest # Используем образ, который собрали
+    build:
+      context: . # Dockerfile находится в текущей директории
+    ports:
+      - "8080:8080" # <порт_хоста>:<порт_контейнера>
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_H2_CONSOLE_SETTINGS_WEB-ALLOW-OTHERS=true #для подключения к H2 вне лкоальной среды
