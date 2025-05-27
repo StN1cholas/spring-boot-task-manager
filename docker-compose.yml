@@ -1,13 +1,12 @@
-version: '3.8' # Версия синтаксиса Docker Compose
+version: '3.8'
 
 services:
   app:
-    image: task-manager-app:latest # Используем образ, который мы собрали
+    image: task-manager-app:latest # Используем образ, который собрали
     build:
       context: . # Dockerfile находится в текущей директории
     ports:
       - "8080:8080" # <порт_хоста>:<порт_контейнера>
     environment:
-      # Здесь можно переопределить переменные окружения, если необходимо
-      # Например, активировать Docker-специфичный профиль Spring
-      - SPRING_PROFILES_ACTIVE=docker # Позволит использовать application-docker.properties
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_H2_CONSOLE_SETTINGS_WEB-ALLOW-OTHERS=true #для подключения к H2 вне лкоальной среды
