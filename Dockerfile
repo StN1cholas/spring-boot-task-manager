@@ -1,4 +1,41 @@
-FROM ubuntu:latest
-LABEL authors="Nicholas"
+# --- Этап сборки (Build Stage) ---
+# Используем базовый образ с JDK и Gradle для сборки нашего приложения
+FROM gradle:8.5-jdk17 AS build
+# Убедись, что версия Gradle и JDK соответствует твоему проекту.
+# Ты используешь Java 17.
 
-ENTRYPOINT ["top", "-b"]
+# Устанавливаем рабочую директорию внутри контейнера
+WORKDIR /app
+
+# Копируем файлы Gradle (чтобы использовать кэш зависимостей Docker)
+COPY build.gradle settings.gradle gradlew ./
+COPY gradle ./gradle
+
+# Скачиваем зависимости. Этот слой будет кэшироваться, если зависимости не менялись.
+# RUN ./gradlew dependencies --info # Можно раскомментировать для отладки
+RUN ./gradlew build --no-daemon -x test # Собираем приложение, пропуская тесты
+# --no-daemon - чтобы Gradle не запускал демон
+# -x test - пропускаем тесты при сборке образа
+
+# Копируем исходный код приложения
+COPY src ./src
+
+# Повторно собираем приложение (теперь с исходниками, используя кэшированные зависимости)
+RUN ./gradlew build --no-daemon -x test
+
+# --- Этап запуска (Runtime Stage) ---
+# Используем легковесный базовый образ OpenJDK JRE для запуска приложения
+FROM eclipse-temurin:17-jre-focal
+
+# Устанавливаем рабочую директорию
+WORKDIR /app
+
+# Копируем собранный JAR-файл из этапа сборки
+# Проверь путь к JAR-файлу в твоей директории build/libs после успешной сборки ./gradlew build
+COPY --from=build /app/build/libs/*.jar app.jar
+
+# Указываем порт, который приложение будет слушать внутри контейнера
+EXPOSE 8080
+
+# Команда для запуска приложения при старте контейнера
+ENTRYPOINT ["java", "-jar", "app.jar"]

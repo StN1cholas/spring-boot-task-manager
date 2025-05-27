@@ -1,0 +1,13 @@
+version: '3.8' # Версия синтаксиса Docker Compose
+
+services:
+  app:
+    image: task-manager-app:latest # Используем образ, который мы собрали
+    build:
+      context: . # Dockerfile находится в текущей директории
+    ports:
+      - "8080:8080" # <порт_хоста>:<порт_контейнера>
+    environment:
+      # Здесь можно переопределить переменные окружения, если необходимо
+      # Например, активировать Docker-специфичный профиль Spring
+      - SPRING_PROFILES_ACTIVE=docker # Позволит использовать application-docker.properties
