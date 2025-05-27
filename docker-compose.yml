@@ -12,9 +12,14 @@ services:
       - SPRING_DATASOURCE_PASSWORD=postgres # (совпадает с POSTGRES_PASSWORD ниже)
       - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
       - SPRING_FLYWAY_ENABLED=true
+      # Redis configuration for the app service
+      - SPRING_DATA_REDIS_HOST=redis # Указываем имя сервиса Redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - SPRING_CACHE_TYPE=redis
       # - SPRING_PROFILES_ACTIVE=docker # если профиль
     depends_on:
       - db # 'app' зависит от сервиса 'db'
+      - redis
     networks:
       - task-manager-net
 
@@ -37,8 +42,24 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine # Используем официальный легковесный образ Redis
+    container_name: taskmanager_redis
+    ports: # Можно пробросить порт Redis наружу для доступа с хоста (опционально, для отладки)
+      - "6379:6379" # <порт_хоста>:<порт_контейнера_redis>
+    volumes:
+      - redis_data:/data # Для сохранения данных Redis
+    networks:
+      - task-manager-net
+    healthcheck: # Проверка состояния Redis
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes: # Определяем именованный том для сохранения данных PostgreSQL
   postgres_data:
+  redis_data:
 
 networks: # Определяем пользовательскую сеть
   task-manager-net:
