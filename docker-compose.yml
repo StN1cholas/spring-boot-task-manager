@@ -1,12 +1,45 @@
-version: '3.8'
-
 services:
   app:
-    image: task-manager-app:latest # Используем образ, который собрали
+    image: task-manager-app:latest # Используем образ приложения
     build:
-      context: . # Dockerfile находится в текущей директории
+      context: .
     ports:
-      - "8080:8080" # <порт_хоста>:<порт_контейнера>
+      - "8080:8080"
     environment:
-      - SPRING_PROFILES_ACTIVE=docker
-      - SPRING_H2_CONSOLE_SETTINGS_WEB-ALLOW-OTHERS=true #для подключения к H2 вне лкоальной среды
+      # Переменные окружения для подключения к БД PostgreSQL в Docker Compose
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/taskmanagerdb
+      - SPRING_DATASOURCE_USERNAME=postgres # (совпадает с POSTGRES_USER ниже)
+      - SPRING_DATASOURCE_PASSWORD=postgres # (совпадает с POSTGRES_PASSWORD ниже)
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
+      - SPRING_FLYWAY_ENABLED=true
+      # - SPRING_PROFILES_ACTIVE=docker # если профиль
+    depends_on:
+      - db # 'app' зависит от сервиса 'db'
+    networks:
+      - task-manager-net
+
+  db:
+    image: postgres:15 # официальный образ PostgreSQL
+    container_name: taskmanager_postgres_db # имя контейнера бд
+    ports: # Можно пробросить порт PostgreSQL наружу для доступа с хоста (опционально, для отладки)
+      - "5433:5432" # <порт_хоста>:<порт_контейнера_postgres> (здесь 5433 на хосте, чтобы не конфликтовать с локальным Postgres)
+    environment:
+      - POSTGRES_DB=taskmanagerdb # Имя базы данных, которая будет создана при первом запуске
+      - POSTGRES_USER=postgres    # Имя суперпользователя PostgreSQL
+      - POSTGRES_PASSWORD=postgres  # Пароль для суперпользователя
+    volumes: # Для сохранения данных PostgreSQL между перезапусками контейнера
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - task-manager-net
+    healthcheck: # Проверка состояния контейнера БД
+      test: ["CMD-SHELL", "pg_isready -U postgres -d taskmanagerdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes: # Определяем именованный том для сохранения данных PostgreSQL
+  postgres_data:
+
+networks: # Определяем пользовательскую сеть
+  task-manager-net:
+    driver: bridge
