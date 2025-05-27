@@ -136,10 +136,9 @@ public class TaskService {
     // Аннотации @Caching лучше перенести на метод, который действительно выполняет основную логику
     // и имеет доступ ко всем нужным данным для ключей кеша.
     @Caching(evict = {
-            @CacheEvict(value = TASKS_CACHE_NAME, key = "#taskId"), // Ключ - ID удаляемой задачи
-            // Для списочных кешей мы используем результат выполнения markTaskAsDeletedAndGetUserId, который Optional<Long> (userId)
-            @CacheEvict(value = USER_TASKS_CACHE_NAME, key = "#result.orElse(null)", condition = "#result.present"),
-            @CacheEvict(value = USER_TASKS_CACHE_NAME, key = "#result.orElse(null) + '_pending'", condition = "#result.present")
+            @CacheEvict(value = TASKS_CACHE_NAME, key = "#taskId"),
+            @CacheEvict(value = USER_TASKS_CACHE_NAME, key = "#result.orElse(null)", condition = "#result != null && #result.isPresent()"), // <<< ДОБАВИЛИ #result != null
+            @CacheEvict(value = USER_TASKS_CACHE_NAME, key = "#result.orElse(null) + '_pending'", condition = "#result != null && #result.isPresent()") // <<< ДОБАВИЛИ #result != null
     })
     public Optional<Long> deleteTask(Long taskId) { // Изменили void на Optional<Long> для возврата userId
         log.info("Attempting to delete task with ID: {}", taskId);

@@ -10,9 +10,5 @@ import java.util.List;
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 
     List<Notification> findByUserId(Long userId);
-
-    // Если бы была логика для "pending" уведомлений на уровне БД (например, поле isRead=false),
-    // можно было бы добавить метод:
-    // List<Notification> findByUserIdAndIsReadFalse(Long userId);
-    // Пока, по вашей логике, getPendingNotifications возвращает все уведомления пользователя.
+    
 }

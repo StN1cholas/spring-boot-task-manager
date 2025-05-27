@@ -25,6 +25,11 @@ public abstract class AbstractIntegrationTest {
         registry.add("spring.datasource.password", postgreSQLContainer::getPassword);
         registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
 
+        // Явно указываем Flyway использовать те же креды, что и основной datasource
+        registry.add("spring.flyway.url", postgreSQLContainer::getJdbcUrl);     // <<< ДОБАВЬ
+        registry.add("spring.flyway.user", postgreSQLContainer::getUsername);   // <<< ДОБАВЬ
+        registry.add("spring.flyway.password", postgreSQLContainer::getPassword); // <<< ДОБАВЬ
+
         // Убедимся, что Flyway включен и настроен для работы с БД в контейнере
         registry.add("spring.flyway.enabled", () -> "true");
         // ddl-auto должно быть 'validate' или 'none' в основном application.properties

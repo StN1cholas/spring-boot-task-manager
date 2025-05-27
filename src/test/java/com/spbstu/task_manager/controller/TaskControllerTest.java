@@ -1,4 +1,6 @@
 package com.spbstu.task_manager.controller;
+import org.springframework.kafka.core.KafkaTemplate;
+import com.spbstu.task_manager.event.TaskCreatedEvent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -19,10 +21,11 @@ import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -95,7 +98,6 @@ public class TaskControllerTest {
         List<Task> pendingTasks = Collections.singletonList(task1);
 
         given(taskServiceMock.getPendingTasks(userId)).willReturn(pendingTasks);
-
         mockMvc.perform(get("/api/tasks/pending/{userId}", userId)
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
@@ -129,7 +131,7 @@ public class TaskControllerTest {
     @Test
     void deleteTask_shouldReturnHttpStatusNoContent() throws Exception {
         Long taskId = 1L;
-        doNothing().when(taskServiceMock).deleteTask(taskId);
+        given(taskServiceMock.deleteTask(taskId)).willReturn(Optional.of(1L));
 
         mockMvc.perform(delete("/api/tasks/{id}", taskId))
                 .andExpect(status().isNoContent());
