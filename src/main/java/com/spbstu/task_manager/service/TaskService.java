@@ -41,12 +41,6 @@ public class TaskService {
     }
 
     @Transactional(readOnly = true)
-    // Ключ будет userId. Обрати внимание, что если getPendingTasks и getAllTasks используют один и тот же
-    // кеш "userTasks" с одинаковым ключом (userId), то они могут перезаписывать друг друга или
-    // возвращать не тот список, если их логика фильтрации разная.
-    // Лучше использовать разные имена кешей или более сложные ключи, если логика сильно отличается.
-    // Для простоты пока оставим так, но это потенциальная точка для улучшения.
-    // Или можно сделать ключ более специфичным: key = "#userId + '_pending'"
     @Cacheable(value = USER_TASKS_CACHE_NAME, key = "#userId + '_pending'")
     public List<Task> getPendingTasks(Long userId) {
         log.info("Fetching pending tasks for user {} from DB", userId);
@@ -59,13 +53,14 @@ public class TaskService {
     @Caching(
             put = { @CachePut(value = TASKS_CACHE_NAME, key = "#result.id", condition = "#result != null && #result.id != null") },
             evict = {
-                    @CacheEvict(value = USER_TASKS_CACHE_NAME, key = "#task.userId"),
-                    @CacheEvict(value = USER_TASKS_CACHE_NAME, key = "#task.userId + '_pending'")
+                    // Попробуем с условием, что task не null
+                    @CacheEvict(value = USER_TASKS_CACHE_NAME, key = "#task.userId", condition = "#task != null"),
+                    @CacheEvict(value = USER_TASKS_CACHE_NAME, key = "#task.userId + '_pending'", condition = "#task != null")
             }
     )
-    public Task createTask(Task task) {
+    public Task createTask(Task task) { // Аргумент называется 'task'
         log.info("Creating task: {}", task.getTitle());
-        task.setDeleted(false);
+        task.setDeleted(false); // Убедимся, что новая задача не удалена
         Task savedTask = taskRepository.save(task);
         log.info("Task created with ID: {}", savedTask.getId());
         return savedTask;
@@ -77,14 +72,6 @@ public class TaskService {
     @Caching(
             evict = {
                     @CacheEvict(value = TASKS_CACHE_NAME, key = "#id"),
-                    // Для очистки списочных кешей нам нужен userId. Мы его получим из задачи перед "удалением".
-                    // Это немного усложняет, если userId не передается напрямую.
-                    // Альтернатива: @CacheEvict(allEntries = true, value = USER_TASKS_CACHE_NAME) - но это слишком грубо.
-                    // Лучше получить задачу, потом ее userId, и потом евиктить.
-                    // Либо, если TaskService имеет доступ к User, можно передавать User.
-                    // Пока оставим так: после вызова этого метода списочные кеши для этого пользователя
-                    // могут быть неактуальны до следующего запроса get*Tasks.
-                    // Более продвинутый вариант - см. ниже.
             }
     )
     public void deleteTask(Long id) {
@@ -101,10 +88,6 @@ public class TaskService {
         }
     }
 
-    // Вспомогательный метод для очистки списочных кешей пользователя
-    // Его можно вызывать из других методов, которые изменяют состояние задач пользователя
-    // Чтобы этот метод сам был управляем кешем (для @CacheEvict), он должен быть public и вызываться через Spring proxy (т.е. из другого бина или this.method())
-    // Но для простоты пока сделаем его приватным и будем просто использовать логику
     @CacheEvict(value = USER_TASKS_CACHE_NAME, key = "#userId")
     public void evictUserTasksCaches(Long userId) { // Должен быть public для работы @CacheEvict извне
         log.info("Evicting all tasks lists for user {}", userId);
@@ -114,23 +97,6 @@ public class TaskService {
     public void evictUserPendingTasksCaches(Long userId) { // Должен быть public для работы @CacheEvict извне
         log.info("Evicting pending tasks list for user {}", userId);
     }
-    // В deleteTask теперь можно вызвать:
-    // this.evictUserTasksCaches(userId);
-    // this.evictUserPendingTasksCaches(userId);
-    // Но для этого deleteTask должен быть менее @Transactional, чтобы вызов this. пошел через прокси.
-    // Или внедрить TaskService сам в себя (не рекомендуется)
-    // Самый простой вариант - сделать логику очистки чуть менее автоматической через аннотации для deleteTask,
-    // либо использовать CacheManager для программной очистки.
-
-    // Для deleteTask с корректной очисткой списочных кешей:
-    // Можно сделать так:
-    // 1. Метод deleteTask остается @Transactional
-    // 2. В конце метода deleteTask, если задача была "удалена", мы вызываем публичные методы
-    //    этого же сервиса (через ApplicationContext или self-инъекцию) для очистки кешей,
-    //    ЛИБО используем CacheManager API.
-    //    Проще всего - если методы createTask, updateTask, deleteTask возвращают userId или сам объект Task,
-    //    тогда в аннотации @CacheEvict можно использовать #result.userId.
-    //    Для deleteTask, который void, это сложнее.
 
     // Переделаем deleteTask для более надежной очистки:
     @Transactional
@@ -148,27 +114,13 @@ public class TaskService {
     }
 
     // Обертка для контроллера, которая использует новый метод и управляет кешами
-    // Этот метод не @Transactional, чтобы вызов markTaskAsDeletedAndGetUserId был через прокси
     @Caching(evict = {
             @CacheEvict(value = TASKS_CACHE_NAME, key = "#id"),
             @CacheEvict(value = USER_TASKS_CACHE_NAME, key = "#result.orElse(null)", condition = "#result.present"),
             @CacheEvict(value = USER_TASKS_CACHE_NAME, key = "#result.orElse(null) + '_pending'", condition = "#result.present")
     })
     public void deleteTaskAndEvictCaches(Long id) {
-        // Внутри этого метода будет вызов this.markTaskAsDeletedAndGetUserId(id) через прокси, если TaskService внедрен сам в себя
-        // или если этот метод вызывается из контроллера.
-        // Для простоты, предположим, что контроллер вызывает markTaskAsDeletedAndGetUserId,
-        // а потом, если успешно, можно было бы очистить кеши программно или иметь отдельные методы для очистки.
 
-        // Пока оставим оригинальный deleteTask, но будем помнить о необходимости корректной инвалидации
-        // списочных кешей. Один из способов - иметь в контроллере после вызова taskService.deleteTask(id);
-        // явный вызов методов очистки, передав туда userId (который контроллер должен как-то получить).
-        // Или использовать ApplicationEventPublisher для события "задача удалена", и слушатель будет чистить кеши.
-
-        // Для простоты Step 6, сфокусируемся на @Cacheable и базовом @CacheEvict / @CachePut.
-        // Сложная инвалидация - тема для углубления.
-        // Оставим deleteTask как был, но с логгированием:
-        // В createTask @CacheEvict уже есть и должен работать.
     }
 
 
