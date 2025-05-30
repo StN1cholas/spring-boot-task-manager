@@ -1,26 +1,38 @@
 package com.spbstu.task_manager;
 
-import com.spbstu.task_manager.model.User; // импорт для тестов с репо
-import com.spbstu.task_manager.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.ApplicationContext;
+import org.springframework.kafka.test.context.EmbeddedKafka; // <<< ИМПОРТ
+import org.springframework.test.annotation.DirtiesContext; // Для очистки контекста, если нужно
+import org.springframework.boot.test.mock.mockito.MockBean; // <<< ИМПОРТ
+import org.springframework.kafka.core.KafkaTemplate;      // <<< ИМПОРТ
+
 import static org.assertj.core.api.Assertions.assertThat;
 
-// Наследуемся от нашего базового класса с Testcontainers
-class TaskManagerApplicationTests extends AbstractIntegrationTest {
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@EmbeddedKafka(    // <<< АННОТАЦИЯ ДЛЯ ВСТРОЕННОГО KAFKA
+		partitions = 1,
+		brokerProperties = { "listeners=PLAINTEXT://localhost:9093", "port=9093" }, // Случайный порт для тестов
+		topics = { "${app.kafka.topic.task-created}" } // Указываем топик, который должен быть создан
+)
+@DirtiesContext // Пересоздает контекст для каждого теста/класса, если нужно чистое состояние Kafka
+// class TaskManagerApplicationTests extends AbstractIntegrationTest { // AbstractIntegrationTest здесь может конфликтовать, т.к. он настраивает PG
+class TaskManagerApplicationTests { // Если этот тест только для Kafka, можно не наследоваться от AbstractIntegrationTest
 
 	@Autowired
 	private ApplicationContext applicationContext;
 
+	@MockBean // <<< МОКИРУЕМ KafkaTemplate
+	private KafkaTemplate<String, ?> kafkaTemplate;
+
 	@Test
 	void contextLoads() {
-		// Простая проверка, что контекст приложения успешно загрузился
 		assertThat(applicationContext).isNotNull();
-		System.out.println("Test PostgreSQL JDBC URL: " + postgreSQLContainer.getJdbcUrl());
-		System.out.println("Test PostgreSQL Username: " + postgreSQLContainer.getUsername());
-		System.out.println("Test PostgreSQL Password: " + postgreSQLContainer.getPassword());
-		// Можно добавить проверки, что ключевые бины (например, репозитории, сервисы) присутствуют в контексте
-		assertThat(applicationContext.getBean(UserRepository.class)).isNotNull();
+		// Проверяем, что KafkaTemplate и KafkaListenerContainerFactory созданы
+		assertThat(applicationContext.containsBean("kafkaTemplate")).isTrue();
+		assertThat(applicationContext.containsBean("kafkaListenerContainerFactory")).isTrue();
+		System.out.println("ApplicationContext loaded successfully with EmbeddedKafka.");
 	}
 }

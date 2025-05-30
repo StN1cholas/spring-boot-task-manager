@@ -1,66 +1,107 @@
 services:
-  app:
-    image: task-manager-app:latest # Используем образ приложения
-    build:
-      context: .
+  zookeeper: # <<< НОВЫЙ СЕРВИС ZOOKEEPER
+    image: confluentinc/cp-zookeeper:7.5.3 # Актуальный образ Zookeeper от Confluent
+    container_name: taskmanager_zookeeper
     ports:
-      - "8080:8080"
+      - "2181:2181" # Стандартный порт Zookeeper
     environment:
-      # Переменные окружения для подключения к БД PostgreSQL в Docker Compose
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/taskmanagerdb
-      - SPRING_DATASOURCE_USERNAME=postgres # (совпадает с POSTGRES_USER ниже)
-      - SPRING_DATASOURCE_PASSWORD=postgres # (совпадает с POSTGRES_PASSWORD ниже)
-      - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
-      - SPRING_FLYWAY_ENABLED=true
-      # Redis configuration for the app service
-      - SPRING_DATA_REDIS_HOST=redis # Указываем имя сервиса Redis
-      - SPRING_DATA_REDIS_PORT=6379
-      - SPRING_CACHE_TYPE=redis
-      # - SPRING_PROFILES_ACTIVE=docker # если профиль
-    depends_on:
-      - db # 'app' зависит от сервиса 'db'
-      - redis
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
     networks:
       - task-manager-net
 
-  db:
-    image: postgres:15 # официальный образ PostgreSQL
-    container_name: taskmanager_postgres_db # имя контейнера бд
-    ports: # Можно пробросить порт PostgreSQL наружу для доступа с хоста (опционально, для отладки)
-      - "5433:5432" # <порт_хоста>:<порт_контейнера_postgres> (здесь 5433 на хосте, чтобы не конфликтовать с локальным Postgres)
+  kafka: # <<< НОВЫЙ СЕРВИС KAFKA
+    image: confluentinc/cp-kafka:7.5.3 # Актуальный образ Kafka от Confluent
+    container_name: taskmanager_kafka
+    ports:
+      # Порт для доступа к Kafka извне Docker-сети (например, из твоего приложения на хосте, если бы оно не было в Docker)
+      - "9092:9092"
+      # Порт для доступа к Kafka изнутри Docker-сети (используется другими контейнерами в той же сети)
+      # - "29092:29092" # Этот порт мы настроим в KAFKA_ADVERTISED_LISTENERS
+    depends_on:
+      - zookeeper # Kafka зависит от Zookeeper
     environment:
-      - POSTGRES_DB=taskmanagerdb # Имя базы данных, которая будет создана при первом запуске
-      - POSTGRES_USER=postgres    # Имя суперпользователя PostgreSQL
-      - POSTGRES_PASSWORD=postgres  # Пароль для суперпользователя
-    volumes: # Для сохранения данных PostgreSQL между перезапусками контейнера
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181 # Kafka подключается к Zookeeper по имени сервиса
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      # PLAINTEXT://kafka:29092 - для коммуникации внутри Docker-сети (имя сервиса 'kafka', порт 29092)
+      # PLAINTEXT_HOST://localhost:9092 - для коммуникации с хост-машины (если проброшен порт 9092)
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1 # Для одного брокера
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+        # KAFKA_CREATE_TOPICS: "task.created.events:1:1" # Можно создавать топики при старте (имя:партиции:репликация)
+      # Или они создадутся автоматически, если auto.create.topics.enable=true (по умолчанию)
+    networks:
+      - task-manager-net
+
+  db: # PostgreSQL сервис (остается как был)
+    image: postgres:15
+    container_name: taskmanager_postgres_db
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_DB=taskmanagerdb
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - task-manager-net
-    healthcheck: # Проверка состояния контейнера БД
+    healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d taskmanagerdb"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine # Используем официальный легковесный образ Redis
+  redis: # Redis сервис (остается как был)
+    image: redis:7-alpine
     container_name: taskmanager_redis
-    ports: # Можно пробросить порт Redis наружу для доступа с хоста (опционально, для отладки)
-      - "6379:6379" # <порт_хоста>:<порт_контейнера_redis>
+    ports:
+      - "6379:6379"
     volumes:
-      - redis_data:/data # Для сохранения данных Redis
+      - redis_data:/data
     networks:
       - task-manager-net
-    healthcheck: # Проверка состояния Redis
+    healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-volumes: # Определяем именованный том для сохранения данных PostgreSQL
+  app: # Твой сервис приложения
+    image: task-manager-app:latest
+    build:
+      context: .
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db:5432/taskmanagerdb
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=postgres
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=validate
+      - SPRING_FLYWAY_ENABLED=true
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - SPRING_CACHE_TYPE=redis
+      # Kafka settings for the app service
+      - SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:29092 # Приложение подключается к Kafka по внутреннему listener'у
+      - APP_KAFKA_TOPIC_TASK-CREATED=task.created.events # Передаем имя топика
+      # - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      db:
+        condition: service_healthy # Ждать, пока БД станет healthy
+      redis:
+        condition: service_healthy # Ждать, пока Redis станет healthy
+      kafka: # Добавляем зависимость от Kafka (Zookeeper неявно требуется Kafka)
+        condition: service_started # Можно service_healthy, если у Kafka есть healthcheck
+    networks:
+      - task-manager-net
+
+volumes:
   postgres_data:
   redis_data:
 
-networks: # Определяем пользовательскую сеть
+networks:
   task-manager-net:
     driver: bridge
